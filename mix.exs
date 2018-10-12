@@ -28,10 +28,9 @@ defmodule Hack18.MixProject do
       {:elixir_make, "~> 0.4"},
       {:scenic, "~> 0.7.0"},
       {:scenic_driver_glfw, "~> 0.7.0"},
-      {:ranch, "~> 1.6"},
       {:loom, git: "https://github.com/asonge/loom", branch: "master"},
-      {:socket, "~> 0.3"},
       {:uuid, "~> 1.1"},
+      {:peerage, "~> 1.0.2"},
     ]
   end
 end

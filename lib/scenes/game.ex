@@ -13,6 +13,7 @@ defmodule Hack18.Scene.Game do
     {:ok, info} = Scenic.ViewPort.info(opts[:viewport])
     player = %Hack18.Player.Model{Hack18.GameState.local_player() | position: Hack18.Position.random(info)}
     player_id = player.start_node.uuid
+    Hack18.GameState.update_player(player_id, player)
 
     graph = Graph.build()
     |> build_grid({@width, @height}, @cell_size)
@@ -20,12 +21,12 @@ defmodule Hack18.Scene.Game do
     #|> Scenic.Primitives.group(fn g ->
       #      Hack18.Player.Component.add_to_graph(g, player, id: player_id)
     #end, id: :players)
-    |> Hack18.Player.Component.add_to_graph(player, id: player_id)
+    |> Hack18.Player.Component.add_to_graph({player.start_node.uuid, player}, id: player_id)
     |> push_graph()
 
     {:ok, _timer} = :timer.send_interval(500, :add_or_remove_players)
 
-    state = %{graph: graph, graph_player_ids: [player_id]}
+    state = %{graph: graph, graph_player_ids: [player_id], local_id: player_id}
     {:ok, state}
   end
 
@@ -33,16 +34,16 @@ defmodule Hack18.Scene.Game do
     present_players = Hack18.GameState.list_players()
     current_graph_players = state.graph_player_ids
     add_to_graph = Enum.reject(present_players, fn p -> Enum.member?(current_graph_players, p.start_node.uuid) end)
-    |> IO.inspect(label: "players to add")
+    #|> IO.inspect(label: "players to add")
 
     present_player_ids = present_players |> Enum.map(fn p -> p.start_node.uuid end)
 
     delete_from_graph = Enum.reject(current_graph_players, fn id -> Enum.member?(present_player_ids, id) end)
-    |> IO.inspect(label: "players to remove")
+    #|> IO.inspect(label: "players to remove")
 
     with_additions = Enum.reduce(add_to_graph, state.graph, fn p, acc ->
       acc
-      |> Hack18.Player.Component.add_to_graph(p, id: p.start_node.uuid)
+      |> Hack18.Player.Component.add_to_graph({state.local_id, p}, id: p.start_node.uuid)
     end)
 
     new_graph = Enum.reduce(delete_from_graph, with_additions, fn p_id, acc ->
@@ -69,10 +70,5 @@ defmodule Hack18.Scene.Game do
         stroke: {1, :gray}
       )
     end)
-  end
-
-  def handle_call({:add_player, player}, _from, state) do
-
-    {:reply, :ok, state}
   end
 end
