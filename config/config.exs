@@ -2,6 +2,8 @@
 # and its dependencies with the aid of the Mix.Config module.
 use Mix.Config
 
+config :logger, level: :info
+
 # Configure the main viewport for the Scenic application
 config :hack18, :viewport, %{
   name: :main_viewport,

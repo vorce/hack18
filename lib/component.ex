@@ -13,7 +13,6 @@ defmodule Hack18.Component do
       end
 
       def add_to_graph(%Scenic.Graph{} = graph, data, opts) do
-        IO.inspect(binding(), label: "add_to_graph")
         verify!(data)
 
         Scenic.Primitive.SceneRef.add_to_graph(

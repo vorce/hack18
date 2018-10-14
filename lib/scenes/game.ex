@@ -8,8 +8,7 @@ defmodule Hack18.Scene.Game do
   @width elem(@viewport.size, 0)
   @height elem(@viewport.size, 1)
 
-  def init({what, opts}) do
-    IO.inspect(binding(), label: "Game init bindings")
+  def init({:game, opts}) do
     {:ok, info} = Scenic.ViewPort.info(opts[:viewport])
     player = %Hack18.Player.Model{Hack18.GameState.local_player() | position: Hack18.Position.random(info)}
     player_id = player.start_node.uuid

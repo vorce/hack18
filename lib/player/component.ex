@@ -15,9 +15,7 @@ defmodule Hack18.Player.Component do
   def verify(_), do: :invalid_data
 
   def init({start_node, model}, _opts, _parent) do
-    IO.inspect(binding(), label: "player component")
-
-    graph = Graph.build()
+    graph = Graph.build(font: :roboto)
     |> render(model)
 
     state = %{graph: graph, model: model, focused: false, start_node: start_node}
@@ -28,6 +26,8 @@ defmodule Hack18.Player.Component do
     latest_model = Hack18.GameState.list_players()
     |> Enum.find(&(&1 .start_node.uuid == model.start_node.uuid))
 
+    gun_angle = angle(latest_model.position, model.aim)
+
     new_graph =
       graph
       |> Graph.modify(
@@ -37,29 +37,32 @@ defmodule Hack18.Player.Component do
           stroke: stroke(state.focused, latest_model.start_node.uuid, state.start_node)
         )
       )
+      |> Graph.modify(latest_model.name <> "_text", &Primitives.update_opts(&1,
+          translate: {latest_model.position.x, latest_model.position.y + 28}))
+      |> Graph.modify(latest_model.name <> "_gun", &Primitives.update_opts(&1,
+          rotate: gun_angle,
+          translate: {latest_model.position.x + 3, latest_model.position.y - 3},
+          hidden: hidden?(latest_model.start_node.uuid, state.start_node)))
       |> push_graph()
 
-    {:noreply, %{state | graph: new_graph, model: latest_model}}
+    {:noreply, %{state | graph: new_graph, model: %Model{latest_model|aim: model.aim}}}
+  end
+
+  defp hidden?(model_id, start_node_id) when model_id == start_node_id, do: false
+  defp hidden?(_model_id, _start_node_id), do: true
+
+  def angle(%Hack18.Position{} = a, %Hack18.Position{} = b) do
+    :math.atan2(b.x - a.x, - (b.y - a.y))
   end
 
   def render(%Graph{} = graph, %Model{} = model) do
-    IO.inspect(model, label: "rendering player")
-    Scenic.Primitives.rectangle(graph, {20, 20}, fill: model.color, translate: {model.position.x, model.position.y}, id: model.name)
-    # graph
-    # |> Primitives.group(
-    #   fn g ->
-    #     g
-    #     |> Primitives.rect(
-    #       {50, 50},
-    #       id: String.to_atom(model.name), fill: model.color
-    #     )
-    #   end,
-    #   translate: {model.position.x, model.position.y}
-    # )
+    graph
+    |> Scenic.Primitives.rectangle({20, 20}, fill: model.color, translate: {model.position.x, model.position.y}, id: model.name)
+    |> Scenic.Primitives.text(model.name, font_size: 12, translate: {model.position.x, model.position.y + 28}, id: model.name <> "_text")
+    |> Scenic.Primitives.triangle({{0, 20}, {14, 20}, {7, -3}}, fill: :white, translate: {model.position.x + 3, model.position.y + 5}, id: model.name <> "_gun")
     |> push_graph()
   end
 
-  # unfocused click in the text field
   def handle_input(
         {:cursor_button, {:left, :press, _, _}},
         context,
@@ -68,8 +71,6 @@ defmodule Hack18.Player.Component do
     {:noreply, capture_focus(context, state)}
   end
 
-  # --------------------------------------------------------
-  # focused click outside the text field
   def handle_input(
         {:cursor_button, {:left, :press, _, _}},
         context,
@@ -78,9 +79,10 @@ defmodule Hack18.Player.Component do
     {:continue, release_focus(context, state)}
   end
 
-  def handle_input({:key, {"right", type, _}}, _context, %{model: model} = state) when type in [:press, :repeat] do
+  def handle_input({:key, {"D", type, _}}, _context, %{model: %Model{alive?: true} = model} = state) when type in [:press, :repeat] do
     new_model = if model.start_node.uuid == state.start_node do
-      new = %Model{model | position: %Position{model.position | x: model.position.x + @step_size}}
+      new_x = horizontal_wrap(model.position.x + @step_size)
+      new = %Model{model | position: %Position{model.position | x: new_x}}
       Hack18.GameState.update_player(new.start_node.uuid, new)
       new
     else
@@ -90,9 +92,10 @@ defmodule Hack18.Player.Component do
     {:noreply, %{state | model: new_model}}
   end
 
-  def handle_input({:key, {"left", type, _}}, _context, %{model: model} = state) when type in [:press, :repeat] do
+  def handle_input({:key, {"A", type, _}}, _context, %{model: %Model{alive?: true} = model} = state) when type in [:press, :repeat] do
     new_model = if model.start_node.uuid == state.start_node do
-      new = %Model{model | position: %Position{model.position | x: model.position.x - @step_size}}
+      new_x = horizontal_wrap(model.position.x - @step_size)
+      new = %Model{model | position: %Position{model.position | x: new_x}}
       Hack18.GameState.update_player(new.start_node.uuid, new)
       new
     else
@@ -102,9 +105,10 @@ defmodule Hack18.Player.Component do
     {:noreply, %{state | model: new_model}}
   end
 
-  def handle_input({:key, {"up", type, _}}, _context, %{model: model} = state) when type in [:press, :repeat] do
+  def handle_input({:key, {"W", type, _}}, _context, %{model: %Model{alive?: true} = model} = state) when type in [:press, :repeat] do
     new_model = if model.start_node.uuid == state.start_node do
-      new = %Model{model | position: %Position{model.position | y: model.position.y - @step_size}}
+      new_y = vertical_wrap(model.position.y - @step_size)
+      new = %Model{model | position: %Position{model.position | y: new_y}}
       Hack18.GameState.update_player(new.start_node.uuid, new)
       new
     else
@@ -114,9 +118,10 @@ defmodule Hack18.Player.Component do
     {:noreply, %{state | model: new_model}}
   end
 
-  def handle_input({:key, {"down", type, _}}, _context, %{model: model} = state) when type in [:press, :repeat] do
+  def handle_input({:key, {"S", type, _}}, _context, %{model: %Model{alive?: true} = model} = state) when type in [:press, :repeat] do
     new_model = if model.start_node.uuid == state.start_node do
-      new = %Model{model | position: %Position{model.position | y: model.position.y + @step_size}}
+      new_y = vertical_wrap(model.position.y + @step_size)
+      new = %Model{model | position: %Position{model.position | y: new_y}}
       Hack18.GameState.update_player(new.start_node.uuid, new)
       new
     else
@@ -126,8 +131,18 @@ defmodule Hack18.Player.Component do
     {:noreply, %{state | model: new_model}}
   end
 
-  def handle_input(_event, _, state) do
-    # IO.inspect(event, label: "handle_input in player component")
+  def handle_input({:key, {" ", type, _}}, _, state) when type in [:press, :repeat] do
+    # TODO: Shoot something
+    {:noreply, state}
+  end
+
+  def handle_input({:cursor_pos, {x, y}}, _, state) do
+    new_aim = %Hack18.Position{x: x, y: y}
+    {:noreply, %{state | model: %Model{state.model | aim: new_aim}}}
+  end
+
+  def handle_input(event, _, state) do
+    IO.inspect(event, label: "event")
     {:noreply, state}
   end
 
@@ -138,7 +153,29 @@ defmodule Hack18.Player.Component do
     {4, :green}
   end
   defp stroke(true, _model_id, _start_node_id) do
-    {2, :red}
+    {1, :red}
+  end
+
+  defp vertical_wrap(new_y) do
+    cond do
+       new_y <= -20 ->
+        600
+       new_y >= 620 ->
+        0
+       true ->
+        new_y
+    end
+  end
+
+  defp horizontal_wrap(new_x) do
+    cond do
+       new_x <= -20 ->
+        800
+       new_x >= 820 ->
+        0
+       true ->
+        new_x
+    end
   end
 
   defp capture_focus(context, %{focused: false} = state) do
@@ -153,7 +190,6 @@ defmodule Hack18.Player.Component do
     %{state | focused: true}
   end
 
-  # --------------------------------------------------------
   defp release_focus(context, %{focused: true} = state) do
     ViewPort.release_input(context, @input_capture)
     # IO.puts("Unfocused")
